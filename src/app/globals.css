@@ -1,0 +1,70 @@
+html {
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+#ticket-print-area {
+  display: none;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #ticket-print-area,
+  #ticket-print-area * {
+    visibility: visible;
+  }
+
+  #ticket-print-area {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 58mm;
+    padding: 4mm 2mm;
+    background: #fff;
+    color: #000;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    letter-spacing: 0.5px;
+    page-break-inside: avoid;
+    box-sizing: border-box;
+  }
+
+  #ticket-print-area .ticket-header {
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 2px;
+  }
+
+  #ticket-print-area .ticket-code {
+    margin: 8px 0;
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 2px;
+  }
+
+  #ticket-print-area .ticket-divider {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  #ticket-print-area .ticket-row {
+    margin: 2px 0;
+  }
+
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+}
