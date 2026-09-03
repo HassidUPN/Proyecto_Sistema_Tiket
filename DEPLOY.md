@@ -35,7 +35,19 @@ public/sounds/notificacion.mp3
 
 por un archivo MP3 real de tu notificación.
 
-## 4) Desplegar a Vercel
+## 4) Impresión directa del kiosco
+
+El navegador no permite que una página web oculte el diálogo de impresión por seguridad. El kiosco ya inicia la impresión automáticamente después de crear el ticket, pero para imprimir sin mostrar el diálogo debes abrir Chrome con `--kiosk-printing` y configurar la impresora térmica como predeterminada.
+
+En Windows, cierra las ventanas de Chrome y ejecuta:
+
+```powershell
+& "$env:ProgramFiles\Google\Chrome\Application\chrome.exe" --kiosk-printing --kiosk http://localhost:3000/kiosco
+```
+
+Para producción, reemplaza la URL por la dirección de Vercel. Con esta configuración el ticket se envía directamente a la impresora predeterminada. Si Chrome está instalado en otra ubicación, usa la ruta de ese ejecutable.
+
+## 5) Desplegar a Vercel
 1. Subir este repositorio a GitHub.
 2. Crear proyecto nuevo en Vercel.
 3. Importar el repositorio.
@@ -44,7 +56,7 @@ por un archivo MP3 real de tu notificación.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 5. Haz deploy.
 
-## 5) Validar el flujo
+## 6) Validar el flujo
 - Entrar a `/kiosco`
 - Elegir trámite y perfil
 - Generar ticket
