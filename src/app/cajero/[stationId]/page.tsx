@@ -38,15 +38,45 @@ export default function CajeroPage() {
     return station.stationType === 'CAJA' ? 'CAJA' : 'SERVICIO_CLIENTE';
   }, [station]);
 
+  const hasValidTicketId = (ticket: Ticket | null) => {
+    return Boolean(ticket?.id && ticket.id !== 'null' && ticket.id !== 'undefined');
+  };
+
   const fetchStation = async () => {
-    const { data, error } = await supabase
-      .from('stations')
-      .select('*')
-      .eq('id', stationId)
-      .single();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(stationId);
+    let data = null;
+    let error = null;
+
+    if (isUuid) {
+      const result = await supabase
+        .from('stations')
+        .select('*')
+        .eq('id', stationId)
+        .maybeSingle();
+
+      data = result.data;
+      error = result.error;
+    }
+
+    if (!data) {
+      const fallback = await supabase
+        .from('stations')
+        .select('*')
+        .eq('label', stationId)
+        .eq('station_type', 'CAJA')
+        .limit(1)
+        .maybeSingle();
+
+      data = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
-      console.error('Error fetching station:', error);
+      console.error('Error fetching station by label for Caja:', error);
+      return null;
+    }
+
+    if (!data) {
       return null;
     }
 
@@ -63,11 +93,11 @@ export default function CajeroPage() {
     return mappedStation;
   };
 
-  const fetchCurrentTicket = async (resolvedServiceType: ServiceType) => {
+  const fetchCurrentTicket = async (resolvedServiceType: ServiceType, targetStationId: string) => {
     const { data: activeTickets, error } = await supabase
       .from('tickets')
       .select('*')
-      .eq('station_id', stationId)
+      .eq('station_id', targetStationId)
       .in('status', ['CALLING', 'IN_PROGRESS'])
       .order('called_at', { ascending: false })
       .limit(1);
@@ -83,6 +113,17 @@ export default function CajeroPage() {
     }
 
     setCurrentTicket(null);
+  };
+
+  const playNotification = () => {
+    try {
+      const audio = new Audio('/sounds/notificacion.mp3');
+      audio.play().catch(() => {
+        // No bloquear la UI si el navegador exige interacción del usuario
+      });
+    } catch {
+      // Ignorar silenciosamente si el navegador no permite audio
+    }
   };
 
   const fetchWaitingTickets = async (resolvedServiceType: ServiceType) => {
@@ -113,7 +154,7 @@ export default function CajeroPage() {
       }
 
       const resolvedServiceType = resolvedStation.stationType === 'CAJA' ? 'CAJA' : 'SERVICIO_CLIENTE';
-      await fetchCurrentTicket(resolvedServiceType);
+      await fetchCurrentTicket(resolvedServiceType, resolvedStation.id);
       await fetchWaitingTickets(resolvedServiceType);
       setLoading(false);
     };
@@ -122,10 +163,18 @@ export default function CajeroPage() {
   }, [stationId]);
 
   useEffect(() => {
-    if (!stationId || !serviceType) return;
+    if (!station || !serviceType) return;
+
+    const refreshQueue = async () => {
+      await fetchWaitingTickets(serviceType);
+      await fetchCurrentTicket(serviceType, station.id);
+    };
+
+    refreshQueue();
+    const poller = window.setInterval(refreshQueue, 4000);
 
     const channel = supabase
-      .channel(`tickets-${stationId}`)
+      .channel(`tickets-${station.id}`)
       .on(
         'postgres_changes',
         {
@@ -149,11 +198,11 @@ export default function CajeroPage() {
           const nextStationId = (updatedTicket as any)?.station_id ?? (updatedTicket as any)?.stationId;
           const previousStationId = (payload.old as any)?.station_id ?? (payload.old as any)?.stationId;
 
-          if (nextStationId === stationId && ['CALLING', 'IN_PROGRESS'].includes(updatedTicket.status)) {
+          if (nextStationId === station.id && ['CALLING', 'IN_PROGRESS'].includes(updatedTicket.status)) {
             setCurrentTicket(toTicket(updatedTicket));
           }
 
-          if (nextStationId !== stationId && previousStationId === stationId) {
+          if (nextStationId !== station.id && previousStationId === station.id) {
             setCurrentTicket((prev) => (prev && prev.id === updatedTicket.id ? null : prev));
           }
 
@@ -169,47 +218,89 @@ export default function CajeroPage() {
 
           fetchWaitingTickets(serviceType);
           const nextCurrent = async () => {
-            await fetchCurrentTicket(serviceType);
+            await fetchCurrentTicket(serviceType, station.id);
           };
           nextCurrent();
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Realtime unavailable for cashier queue. Polling fallback is active.');
+        }
+      });
 
     return () => {
+      window.clearInterval(poller);
       supabase.removeChannel(channel);
     };
-  }, [stationId, serviceType]);
+  }, [station, serviceType]);
 
   const handleCallNextTicket = async () => {
-    if (!stationId || !serviceType) return;
+    if (!station || !serviceType) return;
     setActionLoading(true);
     setMessage('');
 
-    const { data, error } = await supabase.rpc('call_next_ticket', {
-      p_service_type: serviceType,
-      p_station_id: stationId,
-    });
+    try {
+      const { data, error } = await supabase.rpc('call_next_ticket', {
+        p_service_type: serviceType,
+        p_station_id: station.id,
+      });
 
-    if (error) {
-      console.error('Error calling next ticket:', error);
-      setMessage('No hay tickets disponibles para este trámite.');
+      if (error) {
+        console.error('Error calling next ticket:', error);
+        setMessage('No hay tickets disponibles para este trámite.');
+        setActionLoading(false);
+        return;
+      }
+
+      let nextTicket: Ticket | null = null;
+
+      if (data && data.id) {
+        nextTicket = toTicket(data);
+      } else {
+        const { data: fallbackData } = await supabase
+          .from('tickets')
+          .select('*')
+          .eq('service_type', serviceType)
+          .eq('status', 'WAITING')
+          .order('created_at', { ascending: true })
+          .limit(1);
+
+        if (fallbackData && fallbackData.length > 0) {
+          nextTicket = toTicket(fallbackData[0]);
+          const { error: fallbackError } = await supabase
+            .from('tickets')
+            .update({
+              status: 'CALLING',
+              station_id: station.id,
+              called_at: new Date().toISOString(),
+              started_at: new Date().toISOString(),
+              completed_at: null,
+            })
+            .eq('id', nextTicket.id);
+
+          if (fallbackError) {
+            console.error('Error updating fallback ticket:', fallbackError);
+          }
+        }
+      }
+
+      setCurrentTicket(nextTicket);
+      await fetchWaitingTickets(serviceType);
+
+      if (nextTicket) {
+        playNotification();
+        setMessage(`Ticket ${nextTicket.code} llamado correctamente.`);
+      } else {
+        setMessage('No hay tickets en espera para este trámite.');
+      }
+    } finally {
       setActionLoading(false);
-      return;
     }
-
-    setCurrentTicket(data ? toTicket(data) : null);
-    await fetchWaitingTickets(serviceType);
-    if (data) {
-      setMessage(`Ticket ${data.code} llamado correctamente.`);
-    } else {
-      setMessage('No hay tickets en espera para este trámite.');
-    }
-    setActionLoading(false);
   };
 
   const handleMarkAbsent = async () => {
-    if (!currentTicket) {
+    if (!currentTicket || !station || !hasValidTicketId(currentTicket)) {
       setMessage('No hay un ticket en atención para marcar ausente.');
       return;
     }
@@ -219,7 +310,6 @@ export default function CajeroPage() {
       .from('tickets')
       .update({
         status: 'ABSENT',
-        station_id: null,
         called_at: currentTicket.calledAt ?? null,
         completed_at: new Date().toISOString(),
       })
@@ -232,7 +322,7 @@ export default function CajeroPage() {
       return;
     }
 
-    await supabase.from('stations').update({ current_ticket_id: null }).eq('id', stationId);
+    await supabase.from('stations').update({ current_ticket_id: null }).eq('id', station.id);
     setCurrentTicket(null);
     setMessage('Ticket marcado como ausente.');
     setActionLoading(false);
@@ -240,7 +330,7 @@ export default function CajeroPage() {
   };
 
   const handleFinalizeAttention = async () => {
-    if (!currentTicket) {
+    if (!currentTicket || !station || !hasValidTicketId(currentTicket)) {
       setMessage('No hay un ticket en atención para finalizar.');
       return;
     }
@@ -250,7 +340,6 @@ export default function CajeroPage() {
       .from('tickets')
       .update({
         status: 'COMPLETED',
-        station_id: null,
         completed_at: new Date().toISOString(),
       })
       .eq('id', currentTicket.id);
@@ -262,7 +351,7 @@ export default function CajeroPage() {
       return;
     }
 
-    await supabase.from('stations').update({ current_ticket_id: null }).eq('id', stationId);
+    await supabase.from('stations').update({ current_ticket_id: null }).eq('id', station.id);
     setCurrentTicket(null);
     setMessage('Atención finalizada correctamente.');
     setActionLoading(false);
@@ -271,8 +360,8 @@ export default function CajeroPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-slate-100 p-6">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-white p-8 text-center shadow-lg">
+      <main className="min-h-screen bg-white p-6">
+        <div className="mx-auto max-w-6xl rounded-[2rem] border border-sky-100 bg-white p-8 text-center shadow-xl">
           <p className="text-lg font-medium text-slate-600">Cargando estación...</p>
         </div>
       </main>
@@ -281,8 +370,8 @@ export default function CajeroPage() {
 
   if (!station) {
     return (
-      <main className="min-h-screen bg-slate-100 p-6">
-        <div className="mx-auto max-w-6xl rounded-3xl bg-white p-8 text-center shadow-lg">
+      <main className="min-h-screen bg-white p-6">
+        <div className="mx-auto max-w-6xl rounded-[2rem] border border-sky-100 bg-white p-8 text-center shadow-xl">
           <p className="text-lg font-medium text-red-600">No se encontró la estación solicitada.</p>
         </div>
       </main>
@@ -292,27 +381,27 @@ export default function CajeroPage() {
   const currentStatus: TicketStatus | 'SIN_TICKET' = currentTicket ? currentTicket.status : 'SIN_TICKET';
 
   return (
-    <main className="min-h-screen bg-slate-100 p-6 text-slate-800">
+    <main className="min-h-screen bg-white p-4 text-slate-800 sm:p-6">
       <div className="mx-auto max-w-6xl space-y-6">
-        <div className="rounded-3xl bg-white p-6 shadow-lg">
+        <div className="rounded-[2rem] border border-sky-100 bg-white p-6 shadow-[0_20px_60px_rgba(125,160,190,0.16)]">
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm uppercase tracking-[0.25em] text-slate-500">Módulo de Cajero</p>
               <h1 className="mt-2 text-3xl font-bold">Estación {station.label}</h1>
             </div>
-            <div className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+            <div className="rounded-full bg-sky-100 px-4 py-2 text-sm font-bold text-sky-800">
               {station.stationType === 'CAJA' ? 'Caja' : 'Cubículo'}
             </div>
           </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-          <section className="rounded-3xl bg-white p-6 shadow-lg">
+          <section className="rounded-[2rem] border border-sky-100 bg-white p-6 shadow-[0_20px_60px_rgba(125,160,190,0.16)]">
             <h2 className="mb-5 text-2xl font-bold">Atención actual</h2>
 
-            {currentTicket ? (
+            {currentTicket && hasValidTicketId(currentTicket) ? (
               <div className="space-y-5">
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
                   <p className="text-sm uppercase tracking-[0.2em] text-blue-700">Ticket en atención</p>
                   <div className="mt-3 text-5xl font-black text-slate-900">{currentTicket.code}</div>
                   <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-700">
@@ -327,7 +416,7 @@ export default function CajeroPage() {
                     type="button"
                     onClick={handleCallNextTicket}
                     disabled={actionLoading}
-                    className="rounded-2xl bg-blue-600 px-5 py-4 text-base font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                    className="rounded-2xl bg-sky-600 px-5 py-4 text-base font-bold text-white shadow-md transition hover:-translate-y-0.5 hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-200 disabled:!text-sky-800"
                   >
                     Llamar Siguiente Ticket
                   </button>
@@ -336,7 +425,7 @@ export default function CajeroPage() {
                     type="button"
                     onClick={handleMarkAbsent}
                     disabled={actionLoading || currentTicket.status !== 'CALLING'}
-                    className="rounded-2xl bg-amber-500 px-5 py-4 text-base font-semibold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-amber-200"
+                    className="rounded-2xl bg-amber-300 px-5 py-4 text-base font-bold text-amber-950 shadow-md transition hover:-translate-y-0.5 hover:bg-amber-400 disabled:cursor-not-allowed disabled:bg-amber-100"
                   >
                     Marcar Ausente
                   </button>
@@ -345,7 +434,7 @@ export default function CajeroPage() {
                     type="button"
                     onClick={handleFinalizeAttention}
                     disabled={actionLoading}
-                    className="rounded-2xl bg-emerald-600 px-5 py-4 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-200"
+                    className="rounded-2xl bg-emerald-300 px-5 py-4 text-base font-bold text-emerald-950 shadow-md transition hover:-translate-y-0.5 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-100"
                   >
                     Finalizar Atención
                   </button>
@@ -362,21 +451,21 @@ export default function CajeroPage() {
                     type="button"
                     onClick={handleCallNextTicket}
                     disabled={actionLoading}
-                    className="rounded-2xl bg-blue-600 px-5 py-4 text-base font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+                    className="rounded-2xl bg-sky-600 px-5 py-4 text-base font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-sky-200 disabled:!text-sky-800"
                   >
                     Llamar Siguiente Ticket
                   </button>
                   <button
                     type="button"
                     disabled
-                    className="rounded-2xl bg-amber-200 px-5 py-4 text-base font-semibold text-white cursor-not-allowed"
+                    className="cursor-not-allowed rounded-2xl bg-amber-100 px-5 py-4 text-base font-semibold text-amber-800"
                   >
                     Marcar Ausente
                   </button>
                   <button
                     type="button"
                     disabled
-                    className="rounded-2xl bg-emerald-200 px-5 py-4 text-base font-semibold text-white cursor-not-allowed"
+                    className="cursor-not-allowed rounded-2xl bg-emerald-100 px-5 py-4 text-base font-semibold text-emerald-800"
                   >
                     Finalizar Atención
                   </button>
@@ -391,17 +480,17 @@ export default function CajeroPage() {
             )}
           </section>
 
-          <aside className="rounded-3xl bg-slate-900 p-6 text-white shadow-lg">
+          <aside className="rounded-[2rem] border border-indigo-100 bg-indigo-50 p-6 text-slate-800 shadow-[0_20px_60px_rgba(125,160,190,0.16)]">
             <h2 className="mb-5 text-2xl font-bold">Lista de espera</h2>
 
             <div className="space-y-3">
               {waitingTickets.length === 0 ? (
-                <div className="rounded-2xl bg-slate-800 p-4 text-slate-300">Sin tickets en espera.</div>
+                <div className="rounded-2xl bg-white p-4 text-slate-500">Sin tickets en espera.</div>
               ) : (
                 waitingTickets.map((ticket, index) => (
                   <div
                     key={ticket.id}
-                    className="rounded-2xl bg-slate-800 p-4 text-left"
+                    className="rounded-2xl border border-indigo-100 bg-white p-4 text-left"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xl font-bold">{ticket.code}</span>

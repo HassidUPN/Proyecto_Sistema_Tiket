@@ -15,6 +15,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-clave-anon-publica
 4. Ejecuta la consulta.
 
 Esto crea:
+- `workday_sessions`
 - `tickets`
 - `stations`
 - `priority_state`
@@ -22,6 +23,8 @@ Esto crea:
 - enum `ticket_status`, `client_profile`, `service_type`, `station_type`
 - función `generate_ticket_code`
 - función `call_next_ticket`
+
+La función de llamado solo permite estaciones activas y registra `started_at` para calcular los tiempos del dashboard. Si la base ya tenía el esquema anterior, vuelve a ejecutar el archivo completo en SQL Editor antes de desplegar.
 
 ## 3) Reemplazar el audio de notificación
 Sustituye el archivo placeholder en:
@@ -48,3 +51,6 @@ por un archivo MP3 real de tu notificación.
 - Confirmar impresión
 - Revisar `/pantalla-publica`
 - Revisar `/cajero/[stationId]`
+- Entrar a `/admin`, abrir la jornada y activar las estaciones necesarias
+- Entrar a `/accesos` y seleccionar la caja o cubículo correspondiente
+- Revisar el dashboard de atención y sus tiempos

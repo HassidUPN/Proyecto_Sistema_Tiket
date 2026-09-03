@@ -1,6 +1,24 @@
 # Arquitectura — Sistema de Gestión de Turnos Bancarios
 ### Next.js + Tailwind + Supabase (Realtime + Postgres) + Vercel
 
+## Estructura actual del proyecto
+
+```text
+src/app/                 rutas y pantallas del sistema
+src/app/admin/           configuración de jornada y dashboard
+src/app/accesos/         selección de caja, cubículo o kiosco
+src/app/cajero/[stationId]/ atención de una estación
+src/app/kiosco/          emisión de tickets
+src/app/pantalla-publica/ tablero para la sala de espera
+src/components/          componentes visuales reutilizables
+src/lib/                 cliente Supabase y lógica de colas
+src/types/               contratos TypeScript
+public/sounds/           audio de llamado
+supabase-schema.sql      esquema y funciones de PostgreSQL
+```
+
+El acceso de los cajeros se realiza desde `/accesos`; no se debe enlazar una estación fija como `/cajero/1`, porque las estaciones activas se determinan diariamente desde el panel administrativo.
+
 ---
 
 ## 1. Modelo de datos / Estructura de Tickets y Estaciones

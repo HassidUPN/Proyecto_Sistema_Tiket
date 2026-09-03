@@ -1,7 +1,35 @@
-create type ticket_status as enum ('WAITING', 'CALLING', 'IN_PROGRESS', 'COMPLETED', 'ABSENT');
-create type client_profile as enum ('PN', 'TE');
-create type service_type as enum ('CAJA', 'SERVICIO_CLIENTE');
-create type station_type as enum ('CAJA', 'CUBICULO');
+do $$
+begin
+  create type ticket_status as enum ('WAITING', 'CALLING', 'IN_PROGRESS', 'COMPLETED', 'ABSENT');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type client_profile as enum ('PN', 'TE');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type service_type as enum ('CAJA', 'SERVICIO_CLIENTE');
+exception when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  create type station_type as enum ('CAJA', 'CUBICULO');
+exception when duplicate_object then null;
+end $$;
+
+create table if not exists workday_sessions (
+  id uuid primary key default gen_random_uuid(),
+  session_date date not null default current_date,
+  status text not null default 'OPEN' check (status in ('OPEN', 'CLOSED')),
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  opened_by text
+);
 
 create table if not exists stations (
   id uuid primary key default gen_random_uuid(),
@@ -41,6 +69,16 @@ create table if not exists daily_sequence (
   primary key (service_type, profile, seq_date)
 );
 
+with numbered_cubiculos as (
+  select id, row_number() over (order by id) as station_number
+  from stations
+  where station_type = 'CUBICULO'
+)
+update stations
+set label = chr(64 + numbered_cubiculos.station_number::int)
+from numbered_cubiculos
+where stations.id = numbered_cubiculos.id;
+
 create or replace function generate_ticket_code(p_service_type service_type, p_profile client_profile)
 returns text
 language plpgsql
@@ -70,66 +108,32 @@ returns tickets
 language plpgsql
 as $$
 declare
-  v_state priority_state%rowtype;
-  v_pn_count int;
-  v_ratio_te int;
   v_chosen tickets%rowtype;
 begin
-  select * into v_state
-  from priority_state
-  where service_type = p_service_type
-  for update;
-
-  if not found then
-    insert into priority_state (service_type, te_served_since_switch, current_ratio_te)
-    values (p_service_type, 0, 1)
-    returning * into v_state;
+  if not exists (
+    select 1 from stations where id = p_station_id and active = true
+  ) then
+    return null;
   end if;
 
-  select count(*) into v_pn_count
+  select * into v_chosen
   from tickets
   where service_type = p_service_type
-    and profile = 'PN'
-    and status = 'WAITING';
-
-  v_ratio_te := case when v_pn_count < 5 then 2 else 1 end;
-
-  if v_ratio_te <> v_state.current_ratio_te then
-    v_state.te_served_since_switch := 0;
-  end if;
-
-  if v_state.te_served_since_switch < v_ratio_te then
-    select * into v_chosen
-    from tickets
-    where service_type = p_service_type
-      and profile = 'TE'
-      and status = 'WAITING'
-    order by created_at asc
-    limit 1
-    for update skip locked;
-  end if;
+    and status = 'WAITING'
+    and profile = 'TE'
+  order by created_at asc
+  limit 1
+  for update skip locked;
 
   if not found then
     select * into v_chosen
     from tickets
     where service_type = p_service_type
-      and profile = 'PN'
       and status = 'WAITING'
+      and profile = 'PN'
     order by created_at asc
     limit 1
     for update skip locked;
-
-    if found then
-      update priority_state
-      set te_served_since_switch = 0,
-          current_ratio_te = v_ratio_te
-      where service_type = p_service_type;
-    end if;
-  else
-    update priority_state
-    set te_served_since_switch = v_state.te_served_since_switch + 1,
-        current_ratio_te = v_ratio_te
-    where service_type = p_service_type;
   end if;
 
   if not found then
@@ -140,7 +144,7 @@ begin
   set status = 'CALLING',
       station_id = p_station_id,
       called_at = now(),
-      started_at = null,
+      started_at = now(),
       completed_at = null
   where id = v_chosen.id
   returning * into v_chosen;
