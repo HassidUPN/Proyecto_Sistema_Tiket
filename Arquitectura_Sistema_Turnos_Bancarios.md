@@ -1,6 +1,8 @@
 # Arquitectura — Sistema de Gestión de Turnos Bancarios
 ### Next.js + Tailwind + Supabase (Realtime + Postgres) + Vercel
 
+En Vercel Hobby no se configura un cron frecuente. La pantalla pública y los módulos operativos usan polling y Realtime para actualizar la cola; la ruta `/api/verificar-ausentes` queda disponible para una ejecución manual o un servicio externo.
+
 ## Estructura actual del proyecto
 
 ```text
@@ -299,9 +301,7 @@ Se implementa con un **Vercel Cron Job** (ya que despliegas ahí de todas formas
 ```json
 // vercel.json
 {
-  "crons": [
-    { "path": "/api/verificar-ausentes", "schedule": "* * * * *" }
-  ]
+  {}
 }
 ```
 
@@ -442,7 +442,7 @@ sistema-turnos-bancarios/
 │   └── sounds/
 │       └── notificacion.mp3
 │
-├── vercel.json                        # cron de verificar-ausentes
+├── vercel.json                        # configuración de Vercel
 ├── tailwind.config.ts
 ├── next.config.js
 └── package.json

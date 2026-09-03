@@ -1,5 +1,1 @@
-{
-  "crons": [
-    { "path": "/api/verificar-ausentes", "schedule": "* * * * *" }
-  ]
-}
+{}
