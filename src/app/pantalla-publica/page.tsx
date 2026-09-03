@@ -36,7 +36,6 @@ export default function PantallaPublicaPage() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [soundMessage, setSoundMessage] = useState('');
   const lastNotifiedTicketId = useRef<string | null>(null);
-  const notificationInProgress = useRef(false);
 
   const playFallbackBeep = () => {
     const AudioContextConstructor = window.AudioContext;
@@ -56,27 +55,11 @@ export default function PantallaPublicaPage() {
     oscillator.addEventListener('ended', () => context.close());
   };
 
-  const playNotification = async (ticketId?: string | null) => {
-    if (!soundEnabled || !ticketId || lastNotifiedTicketId.current === ticketId || notificationInProgress.current) return;
+  const playNotification = (ticketId?: string | null) => {
+    if (!soundEnabled || !ticketId || lastNotifiedTicketId.current === ticketId) return;
     lastNotifiedTicketId.current = ticketId;
-    notificationInProgress.current = true;
-
-    try {
-      for (let repetition = 0; repetition < 3; repetition += 1) {
-        const audio = new Audio('/sounds/notificacion.mp3');
-        try {
-          await audio.play();
-        } catch {
-          playFallbackBeep();
-        }
-
-        if (repetition < 2) {
-          await new Promise((resolve) => window.setTimeout(resolve, 2000));
-        }
-      }
-    } finally {
-      notificationInProgress.current = false;
-    }
+    const audio = new Audio('/sounds/notificacion.mp3');
+    audio.play().catch(() => playFallbackBeep());
   };
 
   const loadBoard = async (notify = true) => {
