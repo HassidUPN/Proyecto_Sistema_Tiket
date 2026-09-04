@@ -89,6 +89,7 @@ export default function KioscoPage() {
 
       setTimeout(() => {
         window.print();
+        setTimeout(resetFlow, 2000);
       }, 400);
     } catch (error) {
       console.error(error);
@@ -190,13 +191,7 @@ export default function KioscoPage() {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={resetFlow}
-              className="rounded-xl border border-slate-300 bg-white px-5 py-3 font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-            >
-              Solicitar otro ticket
-            </button>
+            <p className="text-sm font-semibold text-slate-500">Regresando al inicio...</p>
           </div>
         )}
       </div>
