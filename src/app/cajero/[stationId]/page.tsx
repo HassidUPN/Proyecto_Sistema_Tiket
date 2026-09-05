@@ -115,17 +115,6 @@ export default function CajeroPage() {
     setCurrentTicket(null);
   };
 
-  const playNotification = () => {
-    try {
-      const audio = new Audio('/sounds/notificacion.mp3');
-      audio.play().catch(() => {
-        // No bloquear la UI si el navegador exige interacción del usuario
-      });
-    } catch {
-      // Ignorar silenciosamente si el navegador no permite audio
-    }
-  };
-
   const fetchWaitingTickets = async (resolvedServiceType: ServiceType) => {
     const { data, error } = await supabase
       .from('tickets')
@@ -289,7 +278,6 @@ export default function CajeroPage() {
       await fetchWaitingTickets(serviceType);
 
       if (nextTicket) {
-        playNotification();
         setMessage(`Ticket ${nextTicket.code} llamado correctamente.`);
       } else {
         setMessage('No hay tickets en espera para este trámite.');
