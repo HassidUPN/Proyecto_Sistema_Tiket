@@ -23,7 +23,7 @@ export function TicketPrintView({ ticket }: { ticket: Ticket }) {
       <div className="ticket-row">Fecha: {createdAt}</div>
       <div className="ticket-divider" />
       <div className="ticket-row">Espere a ser llamado</div>
-      {Array.from({ length: 12 }).map((_, index) => (
+      {Array.from({ length: 5 }).map((_, index) => (
         <div key={index} className="ticket-row ticket-print-spacer-line">
           {'\u00A0'}
         </div>
