@@ -94,6 +94,11 @@ a:focus-visible {
     height: 50mm;
   }
 
+  #ticket-print-area .ticket-print-spacer-line {
+    margin: 0;
+    line-height: 4.2mm;
+  }
+
   @page {
     size: 58mm auto;
     margin: 0;
