@@ -94,9 +94,10 @@ begin
   returning last_value into v_seq;
 
   v_prefix := case
-    when p_profile = 'TE' then 'TE'
+    when p_profile = 'TE' and p_service_type = 'CAJA' then 'TEC'
+    when p_profile = 'TE' then 'TES'
     when p_service_type = 'CAJA' then 'C'
-    else 'SC'
+    else 'S'
   end;
 
   return v_prefix || '-' || lpad(v_seq::text, 3, '0');

@@ -62,7 +62,16 @@ export default function PantallaPublicaPage() {
     audio.play().catch(() => playFallbackBeep());
   };
 
+  const clearAbandonedCalls = async () => {
+    try {
+      await fetch('/api/verificar-ausentes');
+    } catch (error) {
+      console.error('Error clearing abandoned calls:', error);
+    }
+  };
+
   const loadBoard = async (notify = true) => {
+    await clearAbandonedCalls();
     const [{ data: stationData, error: stationError }, { data: activeData, error: activeError }, { data: waitingData }, { data: recentData }] = await Promise.all([
       supabase.from('stations').select('*').eq('active', true).order('station_type').order('label'),
       supabase.from('tickets').select('*').eq('status', 'CALLING').order('called_at', { ascending: false }).limit(50),

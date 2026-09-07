@@ -58,9 +58,15 @@ export default function KioscoPage() {
       });
 
       if (rpcError) {
-        const fallback = `${selectedProfile === 'TE' ? 'TE' : selectedService === 'CAJA' ? 'C' : 'SC'}-${String(
-          Math.floor(Math.random() * 900) + 100,
-        )}`;
+        const prefix =
+          selectedProfile === 'TE'
+            ? selectedService === 'CAJA'
+              ? 'TEC'
+              : 'TES'
+            : selectedService === 'CAJA'
+              ? 'C'
+              : 'S';
+        const fallback = `${prefix}-${String(Math.floor(Math.random() * 900) + 100)}`;
         generatedCode = fallback;
       } else {
         generatedCode = typeof rpcCode === 'string' ? rpcCode : `${selectedProfile}-${Date.now()}`;

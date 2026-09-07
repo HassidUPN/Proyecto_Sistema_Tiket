@@ -176,6 +176,16 @@ export default function AdminPage() {
     setSaving(false);
   };
 
+  const resetTicketNumbering = async () => {
+    if (!window.confirm('¿Reiniciar la numeración de tickets? El próximo ticket generado volverá a empezar en 001.')) return;
+    setSaving(true);
+    setMessage('');
+    const { error } = await supabase.from('daily_sequence').delete().gte('last_value', 0);
+    if (error) setMessage('No se pudo reiniciar la numeración de tickets.');
+    else setMessage('Numeración de tickets reiniciada correctamente.');
+    setSaving(false);
+  };
+
   if (loading) return <main className="flex min-h-screen items-center justify-center bg-white text-slate-800"><p className="text-lg">Cargando panel de administración...</p></main>;
 
   return (
@@ -206,6 +216,7 @@ export default function AdminPage() {
               <div className="mt-6 flex flex-wrap gap-3">
                 <button type="button" onClick={openDay} disabled={saving || Boolean(session)} className="rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300">Abrir jornada</button>
                 <button type="button" onClick={closeDay} disabled={saving || !session} className="rounded-xl bg-slate-900 px-5 py-3 font-bold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300">Cerrar jornada</button>
+                <button type="button" onClick={resetTicketNumbering} disabled={saving} className="rounded-xl bg-red-600 px-5 py-3 font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300">Reiniciar numeración de tickets</button>
               </div>
               {session && <Link href="/accesos" className="mt-4 block rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-center font-bold text-blue-800 transition hover:bg-blue-100">Ver accesos de la jornada</Link>}
               <button type="button" onClick={applyStationPlan} disabled={saving} className="mt-3 text-sm font-bold text-blue-700 hover:text-blue-900">Guardar solo configuración de estaciones</button>
