@@ -18,6 +18,7 @@ export function TicketPrintView({ ticket }: { ticket: Ticket }) {
       <div className="ticket-row">Fecha: {createdAt}</div>
       <div className="ticket-divider" />
       <div className="ticket-row">Espere a ser llamado</div>
+      <div className="ticket-print-spacer" />
     </div>
   );
 }

@@ -55,7 +55,7 @@ a:focus-visible {
     top: 0;
     left: 0;
     width: 58mm;
-    padding: 4mm 2mm 20mm;
+    padding: 4mm 2mm 0;
     background: #fff;
     color: #000;
     font-family: 'Courier New', Courier, monospace;
@@ -88,6 +88,10 @@ a:focus-visible {
 
   #ticket-print-area .ticket-row {
     margin: 2px 0;
+  }
+
+  #ticket-print-area .ticket-print-spacer {
+    height: 50mm;
   }
 
   @page {
